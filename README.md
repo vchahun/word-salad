@@ -5,4 +5,5 @@ Baseline code for [Word Salad: Relating Food Prices and Descriptions](http://vic
 Depends on [creg](https://github.com/redpony/creg), a fast regression modeling framework with a Python interface.
 
 To install it, run:
+
     pip install -e git+https://github.com/redpony/creg.git#egg=creg
