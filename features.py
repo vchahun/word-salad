@@ -46,7 +46,7 @@ def name(item):
     name = tokenize(item['name'])
     nname = sorted(set(w for w in name if w not in _stop))
     if not nname:
-        yield ('norm-nname', '?')
+        yield ('norm-name', '?')
     else:
         yield ('norm-name', ' '.join(nname))
         for (c, w) in ngrams(name):
