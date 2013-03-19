@@ -1,9 +1,9 @@
-from itertools import izip
 import math
+import argparse
+from itertools import izip
 import creg
 import features
 
-PREFIX='/path/to/data'
 MASK = set(['norm-name', 'meta'])
 
 def dataset(filename):
@@ -14,28 +14,37 @@ def mae(model, data):
     pred = model.predict(data)
     return sum(abs(math.exp(p) - math.exp(r)) for ((_, p), r) in izip(data, pred))/len(data)
 
-print('Loading training data...')
-train_data = dataset(PREFIX+'/train.json.gz')
+def main():
+    parser = argparse.ArgumentParser(description='Run regression experiments')
+    parser.add_argument('prefix', help='directory which contains {train,dev,test}.json.gz')
+    args = parser.parse_args()
 
-print('Loading development data...')
-dev_data = dataset(PREFIX+'/dev.json.gz')
+    print('Loading training data...')
+    train_data = dataset(args.prefix+'/train.json.gz')
 
-print('Training...')
-errors = []
-model = creg.LinearRegression()
-for penalty in (100, 10, 1, 0.1, 0.01, 1e-3, 1e-4):
-    print('Penalty: {0}'.format(penalty))
-    model.fit(train_data, l1=penalty, delta=1e-9)
-    error = mae(model, dev_data)
-    errors.append((error, penalty))
-    print(model.weights)
-    print('Dev MAE: {0}'.format(error))
+    print('Loading development data...')
+    dev_data = dataset(args.prefix+'/dev.json.gz')
 
-_, best_penalty = min(errors)
-final_model = creg.LinearRegression()
-final_model.fit(train_data, l1=best_penalty, delta=1e-9)
+    print('Training...')
+    errors = []
+    model = creg.LinearRegression()
+    for penalty in (100, 10, 1, 0.1, 0.01):
+        print('Penalty: {0}'.format(penalty))
+        model.fit(train_data, l1=penalty, delta=1e-9)
+        error = mae(model, dev_data)
+        errors.append((error, penalty))
+        print(model.weights)
+        print('Dev MAE: {0}'.format(error))
 
-print('Loading evaluation data...')
-test_data = dataset(PREFIX+'/test.json.gz')
+    best_error, best_penalty = min(errors)
+    final_model = creg.LinearRegression()
+    final_model.fit(train_data, l1=best_penalty, delta=1e-9)
 
-print('Test MAE: {0}'.format(mae(model, test_data)))
+    print('Loading evaluation data...')
+    test_data = dataset(args.prefix+'/test.json.gz')
+
+    print('Tuned penalty: {} (MAE={})'.format(best_penalty, best_error))
+    print('Test MAE: {0}'.format(mae(model, test_data)))
+
+if __name__ == '__main__':
+    main()
