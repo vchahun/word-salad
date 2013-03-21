@@ -1,50 +1,59 @@
-import math
+import os
 import argparse
-from itertools import izip
-import creg
+import numpy
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.linear_model import Ridge
 import features
 
 MASK = set(['norm-name', 'meta'])
 
-def dataset(filename):
-    points = features.filter(features.extract(filename), MASK)
-    return creg.RealvaluedDataset((f.todict(), math.log(v)) for f, v in points)
+def read_dataset(filename):
+    X, y = [], []
+    points = list(features.filter(features.extract(filename), MASK))
+    for f, v in points:
+        X.append(f.todict())
+        y.append(v)
+    return X, y
 
-def mae(model, data):
-    pred = model.predict(data)
-    return sum(abs(math.exp(p) - math.exp(r)) for ((_, p), r) in izip(data, pred))/len(data)
+def mae(y_pred, y_truth):
+    return numpy.average(numpy.abs(numpy.exp(y_pred) - numpy.exp(y_truth)))
 
 def main():
     parser = argparse.ArgumentParser(description='Run regression experiments')
     parser.add_argument('prefix', help='directory which contains {train,dev,test}.json.gz')
     args = parser.parse_args()
 
+    vectorizer = DictVectorizer()
+
     print('Loading training data...')
-    train_data = dataset(args.prefix+'/train.json.gz')
+    X_train, y_train = read_dataset(os.path.join(args.prefix, 'train.json.gz'))
+    X_train = vectorizer.fit_transform(X_train)
+    y_train = numpy.log(y_train)
 
     print('Loading development data...')
-    dev_data = dataset(args.prefix+'/dev.json.gz')
+    X_dev, y_dev = read_dataset(os.path.join(args.prefix, 'dev.json.gz'))
+    X_dev = vectorizer.transform(X_dev)
+    y_dev = numpy.log(y_dev)
 
     print('Training...')
     errors = []
-    model = creg.LinearRegression()
     for penalty in (100, 10, 1, 0.1, 0.01):
+        model = Ridge(alpha=penalty)
         print('Penalty: {0}'.format(penalty))
-        model.fit(train_data, l1=penalty, delta=1e-9)
-        error = mae(model, dev_data)
-        errors.append((error, penalty))
-        print(model.weights)
+        model.fit(X_train, y_train)
+        error = mae(model.predict(X_dev), y_dev)
+        errors.append((error, penalty, model))
         print('Dev MAE: {0}'.format(error))
 
-    best_error, best_penalty = min(errors)
-    final_model = creg.LinearRegression()
-    final_model.fit(train_data, l1=best_penalty, delta=1e-9)
+    best_error, best_penalty, best_model = min(errors)
 
     print('Loading evaluation data...')
-    test_data = dataset(args.prefix+'/test.json.gz')
+    X_test, y_test = read_dataset(os.path.join(args.prefix, 'test.json.gz'))
+    X_test = vectorizer.transform(X_test)
+    y_test = numpy.log(y_test)
 
     print('Tuned penalty: {} (MAE={})'.format(best_penalty, best_error))
-    print('Test MAE: {0}'.format(mae(model, test_data)))
+    print('Test MAE: {0}'.format(mae(best_model.predict(X_test), y_test)))
 
 if __name__ == '__main__':
     main()
